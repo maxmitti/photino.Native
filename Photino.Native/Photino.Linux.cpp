@@ -46,6 +46,7 @@ gboolean on_window_state_event(GtkWidget *widget, GdkEventWindowState *event, gp
 gboolean on_widget_deleted(GtkWidget *widget, GdkEvent *event, gpointer self);
 gboolean on_focus_in_event(GtkWidget *widget, GdkEvent *event, gpointer self);
 gboolean on_focus_out_event(GtkWidget *widget, GdkEvent *event, gpointer self);
+gboolean on_button_press_event(GtkWidget *widget, GdkEvent *event, gpointer self);
 gboolean on_webview_context_menu(WebKitWebView *web_view,
 								 GtkWidget *default_menu,
 								 WebKitHitTestResult *hit_test_result,
@@ -254,6 +255,12 @@ Photino::Photino(PhotinoInitParams *initParams) : _webview(nullptr)
 	//}
 
 	Photino::Show(false);
+
+	g_signal_connect(G_OBJECT(_webview), "button-press-event",
+									 G_CALLBACK(on_button_press_event),
+									 this);
+
+	gtk_widget_add_events(GTK_WIDGET(_webview), GDK_BUTTON_PRESS_MASK);
 
 	g_signal_connect(G_OBJECT(_window), "focus-in-event",
 					 G_CALLBACK(on_focus_in_event),
@@ -678,6 +685,54 @@ void Photino::SetZoom(int zoom)
 	webkit_web_view_set_zoom_level(WEBKIT_WEB_VIEW(_webview), newZoom);
 }
 
+void Photino::StartDragging()
+{
+	if (!_lastButtonEvent.valid)
+	{
+		return;
+	}
+
+	gtk_window_begin_move_drag(GTK_WINDOW(_window), _lastButtonEvent.button,
+	                           _lastButtonEvent.x_root, _lastButtonEvent.y_root, _lastButtonEvent.time);
+}
+
+void Photino::StartResizing(PhotinoWindowHitTestCode hitTestCode)
+{
+	if (!_lastButtonEvent.valid)
+	{
+		return;
+	}
+
+	GdkWindowEdge edge = [hitTestCode]() -> GdkWindowEdge {
+		switch (hitTestCode)
+		{
+		case PhotinoWindowHitTestCode::TopLeft:
+			return GdkWindowEdge::GDK_WINDOW_EDGE_NORTH_WEST;
+		case PhotinoWindowHitTestCode::Top:
+			return GdkWindowEdge::GDK_WINDOW_EDGE_NORTH;
+		case PhotinoWindowHitTestCode::TopRight:
+			return GdkWindowEdge::GDK_WINDOW_EDGE_NORTH_EAST;
+		case PhotinoWindowHitTestCode::Left:
+			return GdkWindowEdge::GDK_WINDOW_EDGE_WEST;
+		case PhotinoWindowHitTestCode::Right:
+			return GdkWindowEdge::GDK_WINDOW_EDGE_EAST;
+		case PhotinoWindowHitTestCode::BottomLeft:
+			return GdkWindowEdge::GDK_WINDOW_EDGE_SOUTH_WEST;
+		case PhotinoWindowHitTestCode::Bottom:
+			return GdkWindowEdge::GDK_WINDOW_EDGE_SOUTH;
+		case PhotinoWindowHitTestCode::BottomRight:
+			return GdkWindowEdge::GDK_WINDOW_EDGE_SOUTH_EAST;
+		default:
+			return GdkWindowEdge(-1);
+		}
+	}();
+	if (edge != GdkWindowEdge(-1))
+	{
+		gtk_window_begin_resize_drag(GTK_WINDOW(_window), edge, _lastButtonEvent.button,
+		                             _lastButtonEvent.x_root, _lastButtonEvent.y_root, _lastButtonEvent.time);
+	}
+}
+
 void Photino::SetTransparentEnabled(bool enabled)
 {
 	_transparentEnabled = enabled;
@@ -1036,6 +1091,21 @@ gboolean on_webview_context_menu(WebKitWebView *web_view, GtkWidget *default_men
 {
 	Photino *instance = ((Photino *)self);
 	return !instance->_contextMenuEnabled;
+}
+
+gboolean on_button_press_event(GtkWidget *widget, GdkEvent *event, gpointer self)
+{
+	Photino *instance = ((Photino *)self);
+	GdkEventButton *buttonEvent = ((GdkEventButton*)event);
+	std::exchange(instance->_lastButtonEvent, Photino::LastButtonEvent{
+		.x_root = buttonEvent->x_root,
+		.y_root = buttonEvent->y_root,
+		.time = buttonEvent->time,
+		.button = buttonEvent->button,
+		.event = std::unique_ptr<GdkEvent, Photino::LastButtonEvent::EventDeleter>{gdk_event_copy(event)},
+		.valid = true,
+	});
+	return FALSE;
 }
 
 gboolean on_permission_request(WebKitWebView *web_view, WebKitPermissionRequest *request, gpointer user_data)

@@ -24,6 +24,7 @@ typedef char *AutoString;
 #ifdef __linux__
 #include <gtk/gtk.h>
 #include <webkit2/webkit2.h>
+#include <memory>
 #endif
 
 #include <map>
@@ -245,6 +246,21 @@ public:
 	int _minHeight;
 	int _maxWidth;
 	int _maxHeight;
+
+	struct LastButtonEvent {
+		struct EventDeleter {
+			void operator()(GdkEvent* event) const { gdk_event_free(event); }
+		};
+
+		gdouble x_root;
+		gdouble y_root;
+		guint32 time;
+		guint button;
+		std::unique_ptr<GdkEvent, EventDeleter> event;
+		bool valid{false};
+
+	};
+	LastButtonEvent _lastButtonEvent;
 #elif __APPLE__
 	static void Register();
 #endif
