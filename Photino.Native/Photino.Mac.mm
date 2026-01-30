@@ -762,6 +762,17 @@ void Photino::SetZoom(int zoom)
 	[_webview setMagnification: newZoom];
 }
 
+
+void Photino::StartDragging()
+{
+	// TODO: implement
+}
+
+void Photino::StartResizing(PhotinoWindowHitTestCode hitTestCode)
+{
+    // TODO: implement
+}
+
 void EnsureInvoke(dispatch_block_t block)
 {
     if ([NSThread isMainThread])
